@@ -5,6 +5,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/cpufreq.h>
+#include <linux/bitops.h>
 
 #define DRIVER_AUTHOR "Michael Huang <coolbho3000@gmail.com>"
 #define DRIVER_DESCRIPTION "MiSTer FPGA cpufreq driver"
@@ -24,6 +25,19 @@ MODULE_LICENSE("GPL");
 #define DIVF_SHIFT 3
 #define DIVQ_MASK 0x003F0000
 #define DIVQ_SHIFT 16
+
+#define CLKMGR_GEN5_INTER			0x08
+#define CLKMGR_GEN5_BYPASS 0x04
+#define CLKMGR_BYPASS_MAINPLL				BIT(0)
+#define CLKMGR_BYPASS_MAINPLL_OFFSET			0
+
+#define LOCKED_MASK \
+	(CLKMGR_INTER_SDRPLLLOCKED_MASK  | \
+	CLKMGR_INTER_PERPLLLOCKED_MASK  | \
+	CLKMGR_INTER_MAINPLLLOCKED_MASK)
+#define CLKMGR_INTER_MAINPLLLOCKED_MASK			BIT(6)
+#define CLKMGR_INTER_PERPLLLOCKED_MASK			BIT(7)
+#define CLKMGR_INTER_SDRPLLLOCKED_MASK			BIT(8)
 
 // Address offsets
 #define MAINPLL_VCO					0x40
@@ -87,16 +101,6 @@ static const struct socfpga_clock_data clock_data_400000 = {
 	.cfgs2fuser0clk_cnt = 15, // 1600 MHz / (15 + 1) = 100 MHz
 };
 
-// 266.66 MHz underclock
-static const struct socfpga_clock_data clock_data_266666 = {
-	.vco_numer = 63, // 25 MHz * (63 + 1) / (0 + 1) = 1600 MHz
-	.vco_denom = 0,
-	.alteragrp_mpuclk = 5, // 1600 MHz / (5 + 1) = 266.66 MHz
-	.alteragrp_mainclk = 3, // 1600 MHz / (3 + 1) = 400 MHz
-	.alteragrp_dbgatclk = 3, // 1600 MHz / (3 + 1) = 400 MHz
-	.cfgs2fuser0clk_cnt = 15, // 1600 MHz / (15 + 1) = 100 MHz
-};
-
 #define SOCFPGA_CPUFREQ_ROW(freq_khz, f) 		\
 	{				\
 		.driver_data = (unsigned int) &clock_data_##freq_khz,	\
@@ -112,7 +116,6 @@ static struct cpufreq_frequency_table freq_table[] = {
 	SOCFPGA_CPUFREQ_ROW(1000000, CPUFREQ_BOOST_FREQ),
 	SOCFPGA_CPUFREQ_ROW(800000, 0),
 	SOCFPGA_CPUFREQ_ROW(400000, 0),
-	SOCFPGA_CPUFREQ_ROW(266666, 0),
 	{
 		.driver_data = 0,
 		.frequency	= CPUFREQ_TABLE_END,
@@ -133,6 +136,23 @@ static unsigned long long calculate_vco_clock_hz(u32 numer, u32 denom) {
 	vco_freq *= (numer + 1);
 	do_div(vco_freq, (1 + denom));
 	return vco_freq;
+}
+
+void wait_for_lock(u32 mask)
+{
+	u32 inter_val;
+	u32 retry = 0;
+	do {
+		inter_val = readl(clk_mgr_base_addr +
+				  CLKMGR_GEN5_INTER) & mask;
+		/* Wait for stable lock */
+		if (inter_val == mask)
+			retry++;
+		else
+			retry = 0;
+		if (retry >= 10)
+			break;
+	} while (1);
 }
 
 static int socfpga_verify_speed(struct cpufreq_policy_data *policy)
@@ -167,13 +187,27 @@ static unsigned int socfpga_get(unsigned int cpu) {
 	return (unsigned int)mpuclk_freq;
 }
 
+
 static int socfpga_target_index(struct cpufreq_policy *policy,
 		       unsigned int index)
 {
-	unsigned int freq;
+	// TODO: not working for any overclocked frequencies yet.
 	struct socfpga_clock_data * clock_data;
-	clock_data = freq_table[index].driver_data;
-	printk(KERN_INFO "TARGET FREQ %u\n", freq_table[index].frequency);
+
+	clock_data = (struct socfpga_clock_data *) freq_table[index].driver_data;
+
+	// Put main PLL into bypass
+	writel(CLKMGR_BYPASS_MAINPLL, clk_mgr_base_addr + CLKMGR_GEN5_BYPASS);
+	
+	// Write ALTR_MPUCLK
+	writel(clock_data->alteragrp_mpuclk, clk_mgr_base_addr + ALTR_MPUCLK);
+
+	// Wait for lock
+	wait_for_lock(LOCKED_MASK);
+
+	// Put main PLL out of bypass
+	writel(0, clk_mgr_base_addr + CLKMGR_GEN5_BYPASS);
+
 	return 0;
 
 }
@@ -184,7 +218,7 @@ static int socfpga_cpu_init(struct cpufreq_policy *policy)
 	policy->cur = socfpga_get(policy->cpu);
 	policy->cpuinfo.transition_latency = 300 * 1000;
 	policy->cpuinfo.max_freq=1000000;
-	policy->cpuinfo.min_freq=266666;
+	policy->cpuinfo.min_freq=400000;
 	policy->freq_table = freq_table;
 	cpumask_setall(policy->cpus);
 	return 0;
@@ -221,7 +255,7 @@ static int __init socfpga_cpufreq_init(void)
 	clkmgr_np = of_find_compatible_node(NULL, NULL, "altr,clk-mgr");
 	clk_mgr_base_addr = of_iomap(clkmgr_np, 0);
 	of_node_put(clkmgr_np);
-	reg = readl(clk_mgr_base_addr + 0x40);
+	reg = readl(clk_mgr_base_addr + MAINPLL_VCO);
 	return cpufreq_register_driver(&socfpga_cpufreq_driver);
 }
 
