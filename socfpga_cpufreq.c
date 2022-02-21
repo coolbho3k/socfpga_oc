@@ -101,6 +101,16 @@ static const struct socfpga_clock_data clock_data_400000 = {
 	.cfgs2fuser0clk_cnt = 15, // 1600 MHz / (15 + 1) = 100 MHz
 };
 
+// 266 MHz underclock
+static const struct socfpga_clock_data clock_data_266666 = {
+	.vco_numer = 63, // 25 MHz * (63 + 1) / (0 + 1) = 1600 MHz
+	.vco_denom = 0,
+	.alteragrp_mpuclk = 5, // 1600 MHz / (5 + 1) = 266 MHz
+	.alteragrp_mainclk = 3, // 1600 MHz / (3 + 1) = 400 MHz
+	.alteragrp_dbgatclk = 3, // 1600 MHz / (3 + 1) = 400 MHz
+	.cfgs2fuser0clk_cnt = 15, // 1600 MHz / (15 + 1) = 100 MHz
+};
+
 #define SOCFPGA_CPUFREQ_ROW(freq_khz, f) 		\
 	{				\
 		.driver_data = (unsigned int) &clock_data_##freq_khz,	\
@@ -116,6 +126,7 @@ static struct cpufreq_frequency_table freq_table[] = {
 	SOCFPGA_CPUFREQ_ROW(1000000, CPUFREQ_BOOST_FREQ),
 	SOCFPGA_CPUFREQ_ROW(800000, 0),
 	SOCFPGA_CPUFREQ_ROW(400000, 0),
+	SOCFPGA_CPUFREQ_ROW(266666, 0),
 	{
 		.driver_data = 0,
 		.frequency	= CPUFREQ_TABLE_END,
@@ -134,7 +145,7 @@ static unsigned int calculate_vco_reg(u32 numer, u32 denom) {
 static unsigned long long calculate_vco_clock_hz(u32 numer, u32 denom) {
 	unsigned long long vco_freq = OSC1_HZ;
 	vco_freq *= (numer + 1);
-	do_div(vco_freq, (1 + denom));
+	do_div(vco_freq, (denom + 1));
 	return vco_freq;
 }
 
@@ -192,7 +203,7 @@ static int socfpga_target_index(struct cpufreq_policy *policy,
 		       unsigned int index)
 {
 	// TODO: not working for any overclocked frequencies yet.
-	struct socfpga_clock_data * clock_data;
+	struct socfpga_clock_data *clock_data;
 
 	clock_data = (struct socfpga_clock_data *) freq_table[index].driver_data;
 
@@ -217,8 +228,8 @@ static int socfpga_cpu_init(struct cpufreq_policy *policy)
 
 	policy->cur = socfpga_get(policy->cpu);
 	policy->cpuinfo.transition_latency = 300 * 1000;
-	policy->cpuinfo.max_freq=1000000;
-	policy->cpuinfo.min_freq=400000;
+	policy->cpuinfo.max_freq=800000;
+	policy->cpuinfo.min_freq=266666;
 	policy->freq_table = freq_table;
 	cpumask_setall(policy->cpus);
 	return 0;
