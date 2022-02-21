@@ -6,6 +6,7 @@
 #include <linux/of_address.h>
 #include <linux/cpufreq.h>
 #include <linux/bitops.h>
+#include <linux/wait_bit.h>
 
 #define DRIVER_AUTHOR "Michael Huang <coolbho3000@gmail.com>"
 #define DRIVER_DESCRIPTION "MiSTer FPGA cpufreq driver"
@@ -38,6 +39,9 @@ MODULE_LICENSE("GPL");
 #define CLKMGR_INTER_MAINPLLLOCKED_MASK			BIT(6)
 #define CLKMGR_INTER_PERPLLLOCKED_MASK			BIT(7)
 #define CLKMGR_INTER_SDRPLLLOCKED_MASK			BIT(8)
+
+#define CLKMGR_STAT			0x14
+#define CLKMGR_STAT_BUSY				BIT(0)
 
 // Address offsets
 #define MAINPLL_VCO					0x40
@@ -159,11 +163,20 @@ void wait_for_lock(u32 mask)
 		/* Wait for stable lock */
 		if (inter_val == mask)
 			retry++;
-		else
+		else {
+			printk(KERN_INFO "socfpga_cpufreq: retry %u\n", retry);
 			retry = 0;
+		}
 		if (retry >= 10)
 			break;
 	} while (1);
+	printk(KERN_INFO "socfpga_cpufreq: waited for lock, retry %u\n", retry);
+}
+
+int wait_for_fsm(void)
+{
+	return wait_on_bit((void *)(clk_mgr_base_addr +
+				 CLKMGR_STAT), CLKMGR_STAT_BUSY, TASK_UNINTERRUPTIBLE);
 }
 
 static int socfpga_verify_speed(struct cpufreq_policy_data *policy)
@@ -209,6 +222,7 @@ static int socfpga_target_index(struct cpufreq_policy *policy,
 
 	// Put main PLL into bypass
 	writel(CLKMGR_BYPASS_MAINPLL, clk_mgr_base_addr + CLKMGR_GEN5_BYPASS);
+	wait_for_fsm();
 	
 	// Write ALTR_MPUCLK
 	writel(clock_data->alteragrp_mpuclk, clk_mgr_base_addr + ALTR_MPUCLK);
@@ -218,6 +232,7 @@ static int socfpga_target_index(struct cpufreq_policy *policy,
 
 	// Put main PLL out of bypass
 	writel(0, clk_mgr_base_addr + CLKMGR_GEN5_BYPASS);
+	wait_for_fsm();
 
 	return 0;
 
