@@ -17,6 +17,7 @@ MODULE_DESCRIPTION(DRIVER_DESCRIPTION);
 MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL");
 
+// TODO: Get this from the clk framework?
 #define OSC1_HZ 25000000;
 
 #define VCO_NUMER_OFFSET 3
@@ -64,6 +65,9 @@ struct socfpga_clock_data {
 	u32 alteragrp_dbgatclk; // Divides the VCO frequency by the value+1
 	u32 cfgs2fuser0clk_cnt; // Divides the VCO frequency by the value+1
 };
+
+// TODO: Test stability of various combinations.
+// Is it better to underclock the VCO and turn the multipliers up?
 
 // 1200 MHz overclock
 static const struct socfpga_clock_data clock_data_1200000 = {
@@ -125,7 +129,7 @@ static const struct socfpga_clock_data clock_data_266666 = {
 
 static struct cpufreq_frequency_table freq_table[] = {
 	// Mark OC rows as CPUFREQ_BOOST_FREQ to prevent cpufreq from setting them
-	// as the policy max
+	// as the policy max by default. A bit hacky.
 	SOCFPGA_CPUFREQ_ROW(1200000, CPUFREQ_BOOST_FREQ),
 	SOCFPGA_CPUFREQ_ROW(1000000, CPUFREQ_BOOST_FREQ),
 	SOCFPGA_CPUFREQ_ROW(800000, 0),
@@ -202,10 +206,10 @@ static unsigned int socfpga_get(unsigned int cpu) {
 	mpuclk_freq = calculate_vco_clock_hz(numer, denom);
 
 	// Divide by value of registers
-	do_div(mpuclk_freq, (1 + alteragrp_mpuclk_reg));
+	do_div(mpuclk_freq, alteragrp_mpuclk_reg + 1);
 	do_div(mpuclk_freq, mpuclk_cnt_reg + 1);
 
-	// Convert to KHz
+	// Convert to KHz as that's what cpufreq expects
 	do_div(mpuclk_freq, 1000);
 
 	return (unsigned int)mpuclk_freq;
@@ -215,7 +219,9 @@ static unsigned int socfpga_get(unsigned int cpu) {
 static int socfpga_target_index(struct cpufreq_policy *policy,
 		       unsigned int index)
 {
-	// TODO: not working for any overclocked frequencies yet.
+	// TODO: Not working for any overclocked frequencies yet.
+	// TODO: Large transitions currently tend to crash.
+	// TODO: What clocks should we actually gate?
 	struct socfpga_clock_data *clock_data;
 
 	clock_data = (struct socfpga_clock_data *) freq_table[index].driver_data;
@@ -242,6 +248,7 @@ static int socfpga_cpu_init(struct cpufreq_policy *policy)
 {
 
 	policy->cur = socfpga_get(policy->cpu);
+	// TODO: Taken from an old Tegra driver. Fill in a sensible value.
 	policy->cpuinfo.transition_latency = 300 * 1000;
 	policy->cpuinfo.max_freq=800000;
 	policy->cpuinfo.min_freq=266666;
@@ -253,6 +260,7 @@ static int socfpga_cpu_init(struct cpufreq_policy *policy)
 
 static int socfpga_cpu_exit(struct cpufreq_policy *policy)
 {
+	// TODO
 	return 0;
 }
 
