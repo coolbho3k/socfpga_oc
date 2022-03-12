@@ -256,13 +256,14 @@ static struct freq_attr *socfpga_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver socfpga_cpufreq_driver = {
-        .verify       = socfpga_verify_speed,
-        .target_index = socfpga_target_index,
-        .get          = socfpga_get,
-        .init         = socfpga_cpu_init,
-        .exit         = socfpga_cpu_exit,
-        .name         = "socfpga",
-        .attr         = socfpga_cpufreq_attr,
+        .verify        = socfpga_verify_speed,
+        .target_index  = socfpga_target_index,
+        .get           = socfpga_get,
+        .init          = socfpga_cpu_init,
+        .exit          = socfpga_cpu_exit,
+        .name          = "socfpga",
+        .attr          = socfpga_cpufreq_attr,
+        .boost_enabled = false,
 };
 
 static int __init socfpga_cpufreq_init(void)
