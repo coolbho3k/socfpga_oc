@@ -1,6 +1,6 @@
+#include <linux/cpufreq.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
-#include <linux/cpufreq.h>
 #include <linux/wait_bit.h>
 
 #define DRIVER_AUTHOR "Michael Huang <coolbho3000@gmail.com>"
@@ -55,7 +55,7 @@ static const struct socfpga_clock_data clock_data_1200000 = {
         .vco_denom = 0,
         .alteragrp_mpuclk = 1, // 2400 MHz / (1 + 1) = 1200 MHz
         .alteragrp_mainclk = 5, // 2400 MHz / (5 + 1) = 400 MHz
-        .alteragrp_dbgatclk = 5, // 2000 MHz / (5 + 1) = 400 MHz
+        .alteragrp_dbgatclk = 5, // 2400 MHz / (5 + 1) = 400 MHz
         .mainpll_cfgs2fuser0clk = 23, // 2400 MHz / (23 + 1) = 100 MHz
 };
 
