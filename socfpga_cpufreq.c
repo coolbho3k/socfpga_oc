@@ -1,13 +1,7 @@
 #include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/kernel.h>
-#include <linux/io.h>
-#include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/cpufreq.h>
-#include <linux/bitops.h>
 #include <linux/wait_bit.h>
-#include <linux/ktime.h>
 
 #define DRIVER_AUTHOR "Michael Huang <coolbho3000@gmail.com>"
 #define DRIVER_DESCRIPTION "DE10 Nano cpufreq driver"
@@ -211,9 +205,6 @@ static int socfpga_target_index(struct cpufreq_policy *policy,
 {
         struct socfpga_clock_data *clock_data;
         u64 current_vco_clock_hz, target_vco_clock_hz;
-        ktime_t cur, end;
-
-        cur = ktime_get();
 
         clock_data = (struct socfpga_clock_data *) freq_table[index].driver_data;
 
@@ -234,9 +225,6 @@ static int socfpga_target_index(struct cpufreq_policy *policy,
         }
 
         mutex_unlock(&socfpga_cpufreq_mutex);
-
-        end = ktime_get();
-        printk(KERN_INFO "ns DELTA %llu\n", ktime_to_ns(end)-ktime_to_ns(cur));
 
         return 0;
 }
