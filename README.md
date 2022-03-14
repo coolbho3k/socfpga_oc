@@ -1,6 +1,6 @@
-# MiSTer FPGA cpufreq driver
+# DEPRECATED: Work is moved out of a Linux LKM and into https://github.com/coolbho3k/Linux-Kernel_MiSTer/tree/overclock
 
-DEPRECATED: Work is moved out of a Linux LKM and into https://github.com/coolbho3k/Linux-Kernel_MiSTer/tree/overclock
+# MiSTer FPGA cpufreq driver
 
 This is very WIP! It's not fully working yet.
 
